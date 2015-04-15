@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		  xmlns:s="library://ns.adobe.com/flex/spark" 
+		  xmlns:mx="library://ns.adobe.com/flex/mx" 		  
+		  cornerRadius="5"	
+		  creationComplete="creationCompleteHandler(event)"
+		  >
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="-8" paddingRight="-10" horizontalAlign="center"/>
+	</s:layout>
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			
+			[Bindable]public var timeoffset:String;
+			public var thumburl:String;
+			
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{							
+//				XMLconfig.send();
+				
+				mImage.source = thumburl+"?timeoffset="+timeoffset;					
+				
+				var thumbtime:Date = new Date(Number(timeoffset) + (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000));				
+				mLabel.text = thumbtime.toLocaleString();
+			}
+			
+			/*load XML*/
+			protected function XMLconfig_resultHandler(event:ResultEvent):void
+			{								
+				mImage.source = event.result.config.thumburl+"?timeoffset="+timeoffset;					
+				
+				var thumbtime:Date = new Date(Number(timeoffset) + (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000));				
+				mLabel.text = thumbtime.toLocaleString();
+			}
+			
+			/*Error*/
+			protected function faultHandler(event:FaultEvent):void
+			{
+				Alert.show(event.fault.faultString, "Error");
+				
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		
+		<s:HTTPService id="XMLconfig"
+					   url="config.xml"
+					   result="XMLconfig_resultHandler(event)"
+					   fault="faultHandler(event)"					   
+					   />
+		
+	</fx:Declarations>	
+
+	<s:Image id="mImage" width="200" height="{mImage.width*9/16}" horizontalCenter="0"/>
+	<s:Label id="mLabel" textAlign="center" horizontalCenter="0"/>
+	
+</s:BorderContainer>

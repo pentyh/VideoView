@@ -1,0 +1,1477 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:local="*"
+			   creationComplete="creationCompleteHandler()">
+	
+		<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		
+		@font-face{
+			src: url('./font/arial.ttf');
+			fontFamily: "malgun";
+		}
+		/*@font-face 
+		{ 
+			src:url(C:\Windows\Fonts\arial.ttf);
+			fontFamily: malgun;			
+		}*/
+		
+		/*s|Button{
+		fontSize:20;
+		}*/
+		
+		.myBorderContainer
+		{			
+			/*backgroundColor:#282828;*/
+			borderVisible:false;
+			fontFamily:malgun;
+		}
+		
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import flash.external.ExternalInterface;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.formatters.Formatter;
+			import mx.managers.IBrowserManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			import mx.utils.UIDUtil;
+			
+			import spark.components.Label;
+			import spark.events.IndexChangeEvent;
+			
+			/*// can not change*/
+			private var startYear:Number = new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000;
+			private var progressLine:uint = 0X3366ff;
+			[Bindable]private var videobackgroundColor:uint;
+			[Bindable]private var progressBarColor:uint;	
+			[Bindable]private var buttonColor:uint;
+			[Bindable]private var stack:uint;
+			[Bindable]private var starttoendstack:uint;
+			[Bindable]private var bufferTime:Number = 0;	
+			[Bindable]private var mConfirm:Boolean;	
+			
+			private var goLive:String = "GO LIVE";
+			private var Live:String = "LIVE";
+			
+			/*// can change*/
+			private var newGUID:String;
+			private var Living:Boolean = false;		
+			private var liveUrl:String;
+			private var imageUrl:String;
+			private var thumbUrl:String;
+			private var key:String;			
+			private var saveurl:String;			
+			private var serverurl:String;			
+			private var port:String;			
+			private var channelname:String;	
+			private var today:Date = new Date;						
+			private var line:Line;
+			private var label:Label;
+			private var i:int;
+			
+			private var pre_startTime:Number = 0;
+			private var pre_endTime:Number = 0;
+			
+			/*// label ArrayCollection*/
+			private var label10ac:ArrayCollection = new ArrayCollection;
+			private var labelProgress10ac:ArrayCollection = new ArrayCollection;
+			
+			private var labelAC:ArrayCollection = new ArrayCollection;
+			private var labelProgressAC:ArrayCollection = new ArrayCollection;
+			
+			private var label24AC:ArrayCollection = new ArrayCollection;
+			private var labelProgress24AC:ArrayCollection = new ArrayCollection;
+			
+			private var connection:NetConnection = new NetConnection(); 
+			private var stream:NetStream;
+			
+			[Bindable]private var video:Video = null;	
+			
+			[Bindable]private var minute:Number = 6*24*10;
+			[Bindable]private var hour:int = 12*10;
+			[Bindable]private var day:int = 10;		
+			
+			private var progressBarSize:Number = 700;
+			private var progressSize10:Number = (progressBarSize - 50)*(minute+1);
+			private var progressSize:Number = (progressBarSize - 50)*(hour+1);			
+			private var progressSize24:Number = (progressBarSize - 50)*(day+1);	
+			
+			[Bindable]private var redPoint10:Number = new Number;
+			[Bindable]private var redPoint:Number = new Number;
+			[Bindable]private var redPoint24:Number = new Number;
+			
+			[Bindable]private var redStack:Number = 0;
+			[Bindable]private var redStackPoint:Number = new Number;
+			
+			[Bindable]private var Begin10Minutes:Number = 0;
+			[Bindable]private var Begin2Hour:Number = 0;
+			[Bindable]private var Begin24Hour:Number = 0;
+			
+			private var bm:IBrowserManager;
+			
+			
+			private function httpEncoding(param:String):String{
+				return encodeURIComponent(param);
+			}					
+			
+			private function getCname():String{
+				
+				trace(this.parameters.cname);
+//				Alert.show("IM"+this.parameters.cname);
+				
+				var str:String = "";
+				str = this.parameters.cname;
+				//				bm=BrowserManager.getInstance();
+				//				bm.init(); 
+				//				var str:String = bm.url.substring(bm.url.indexOf("?")+1);	
+				
+				return str;
+			}
+			
+			private function getConfirm():Boolean{
+				
+				trace(this.parameters.confirm);
+				var confirm:int = this.parameters.confirm;
+				
+				//				Alert.show(""+confirm);
+				var bool:Boolean = false;
+				if(confirm == 1){
+					bool = true;
+				}
+				
+				mConfirm = bool;
+				return bool;
+			}
+			
+			private function getTitle_input():Boolean{
+				
+				trace(this.parameters.title_input);
+				var title_input:int = this.parameters.titleinput;
+				
+				var bool:Boolean = false;
+				if(title_input == 1){
+					bool = true;
+				}
+				return bool;
+			}
+			
+			private function sendCMS(title:String, content:String):void{
+				
+				if(mTextInputStart.text == "" || mTextInputEnd.text == ""){
+					Alert.show("시작시간과 종료시간을 지정하세요!");
+					callJs("error");
+				}else{
+					
+					var params:URLVariables = new URLVariables();	
+					params.src = httpEncoding(serverurl +"|"+ port +"|"+ channelname);
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputStart.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputEnd.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					
+					saveurl+="&src="+params.src;
+					newGUID = UIDUtil.createUID();
+					saveurl+="&guid="+httpEncoding(newGUID);
+					//예약 여부 판단
+					var reserve:Boolean = new Date(mTextInputEnd.text).time > new Date().time;
+					if( reserve ){
+						params.type = httpEncoding("reserve");	
+						saveurl+="&type="+params.type;
+					}
+					
+					params.title = httpEncoding(title);
+					params.content = httpEncoding(content);
+					saveurl+="&title="+params.title;
+					saveurl+="&content="+params.content;
+					
+//										Alert.show(saveurl);	
+					//					callJs();
+					save.url = saveurl;
+					save.send();	
+				}
+				
+			}
+			
+			public function callJs(uid:String):void {
+				var f:String = "setUid";
+				var result:Boolean = ExternalInterface.call(f,uid);
+				
+				if(!result){
+					
+					Alert.show("setUid Error.");
+				}
+				//				trace(result);
+			}
+			
+			/*// Init()*/
+			protected function creationCompleteHandler():void
+			{					
+				
+				
+				getConfirm();
+				ExternalInterface.addCallback("sendSwf", sendCMS);  
+				
+				URLconfig.send();												
+				
+				// 10 Minutes
+				mBorderContainerProgress10.contentGroup.graphics.lineStyle(10, 0Xffffff, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress10.contentGroup.graphics.moveTo(0,30);
+				mBorderContainerProgress10.contentGroup.graphics.lineTo(50+progressSize10,30);		
+				
+				mBorderContainerProgress10.contentGroup.graphics.lineStyle(1, progressLine, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress10.contentGroup.graphics.moveTo(0,35);
+				mBorderContainerProgress10.contentGroup.graphics.lineTo(50+progressSize10,35);		
+				today = new Date;
+				today.minutes = today.minutes - 5;
+				var nminute:int = minute+1;
+				for(i = 0; i < (60*nminute)+1; i++){											
+					
+					if(i%30 == 0){						
+						mBorderContainerProgress10.contentGroup.graphics.moveTo(25+progressSize10*i/(60*nminute),25);
+						mBorderContainerProgress10.contentGroup.graphics.lineTo(25+progressSize10*i/(60*nminute),50);									
+						
+						label = new Label;																		
+						label.x = 25+progressSize10*i/(60*nminute)-10;
+						label.y = 50;						
+						
+						switch(i%60){
+							case 0:																					
+								label.text = today.hours +":"+ today.minutes;// + ":00";									
+								today.minutes = today.minutes + 5;
+								break;
+							case 30:								
+								label.text = today.hours +":"+ today.minutes;// + ":00";
+								today.minutes = today.minutes + 5;				
+								break;
+						}				
+						label10ac.addItem(label);
+						mBorderContainerProgress10.addElement(label);	
+						
+					}else if(i%6 == 0){
+						
+						mBorderContainerProgress10.contentGroup.graphics.moveTo(25+progressSize10*i/(60*nminute),35);
+						mBorderContainerProgress10.contentGroup.graphics.lineTo(25+progressSize10*i/(60*nminute),50);						
+					}else{						
+						mBorderContainerProgress10.contentGroup.graphics.moveTo(25+progressSize10*i/(60*nminute),35);
+						mBorderContainerProgress10.contentGroup.graphics.lineTo(25+progressSize10*i/(60*nminute),42);							
+					}	
+					
+				}
+				
+				// 2 Hour
+				mBorderContainerProgress.contentGroup.graphics.lineStyle(10, 0Xffffff, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress.contentGroup.graphics.moveTo(0,30);
+				mBorderContainerProgress.contentGroup.graphics.lineTo(50+progressSize,30);	
+				
+				mBorderContainerProgress.contentGroup.graphics.lineStyle(1, progressLine, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress.contentGroup.graphics.moveTo(0,35);
+				mBorderContainerProgress.contentGroup.graphics.lineTo(50+progressSize,35);	
+				today = new Date;
+				today.hours = today.hours - 1;
+				var nhour:int = hour+1;					
+				for(var i:int = 0; i<(60*nhour)+1; i++){					
+					
+					if(i%15 == 0){						
+						mBorderContainerProgress.contentGroup.graphics.moveTo(25+progressSize*i/(60*nhour),25);
+						mBorderContainerProgress.contentGroup.graphics.lineTo(25+progressSize*i/(60*nhour),50);									
+						
+						label = new Label;
+						label.x = 25+progressSize*i/(60*nhour)-10;
+						label.y = 50;						
+						
+						switch(i%60){
+							case 0:								
+								label.text = today.hours+":00";							
+								break;
+							case 15:
+								label.text = today.hours+":30";
+								today.hours++;
+								break;
+							case 30:
+								label.text = today.hours+":00";
+								break;
+							case 45:
+								label.text = today.hours+":30";	
+								today.hours++;
+								break;
+						}									
+						labelAC.addItem(label);
+						mBorderContainerProgress.addElement(label);
+						
+					}else if(i%5 == 0){
+						
+						mBorderContainerProgress.contentGroup.graphics.moveTo(25+progressSize*i/(60*nhour),35);
+						mBorderContainerProgress.contentGroup.graphics.lineTo(25+progressSize*i/(60*nhour),50);						
+					}else{						
+						mBorderContainerProgress.contentGroup.graphics.moveTo(25+progressSize*i/(60*nhour),35);
+						mBorderContainerProgress.contentGroup.graphics.lineTo(25+progressSize*i/(60*nhour),42);							
+					}
+				}	
+				
+				// 24 Hour	
+				
+				mBorderContainerProgress24.contentGroup.graphics.lineStyle(10, 0Xffffff, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress24.contentGroup.graphics.moveTo(0, 30);
+				mBorderContainerProgress24.contentGroup.graphics.lineTo(50+progressSize24,30);	
+				
+				mBorderContainerProgress24.contentGroup.graphics.lineStyle(1, progressLine, 1, false, LineScaleMode.NORMAL, CapsStyle.NONE, JointStyle.MITER, 100);
+				mBorderContainerProgress24.contentGroup.graphics.moveTo(0, 35);
+				mBorderContainerProgress24.contentGroup.graphics.lineTo(50+progressSize24,35);									
+				var nday:int = day + 1;		
+				today = new Date;
+				today.hours = today.hours-12;
+				for(i = 0; i<(48*nday)+1; i++){					
+					
+					if(i%8 == 0){						
+						mBorderContainerProgress24.contentGroup.graphics.moveTo(25+progressSize24*i/(48*nday),25);
+						mBorderContainerProgress24.contentGroup.graphics.lineTo(25+progressSize24*i/(48*nday),50);									
+						
+						label = new Label;
+						label.x = 25+progressSize*i/(60*nhour)-10;
+						label.y = 50;						
+						
+						label = new Label;
+						label.x = 25+progressSize24*i/(48*nday)-10;
+						label.y = 50;												
+						
+						if((i%8) == 0){
+							label.text = (today.hours)+":00";		
+							today.hours = today.hours+4;
+						}		
+						label24AC.addItem(label);
+						mBorderContainerProgress24.addElement(label);
+						
+					}else if(i%2 == 0){
+						
+						mBorderContainerProgress24.contentGroup.graphics.moveTo(25+progressSize24*i/(48*nday),35);
+						mBorderContainerProgress24.contentGroup.graphics.lineTo(25+progressSize24*i/(48*nday),50);						
+					}else{						
+						mBorderContainerProgress24.contentGroup.graphics.moveTo(25+progressSize24*i/(48*nday),35);
+						mBorderContainerProgress24.contentGroup.graphics.lineTo(25+progressSize24*i/(48*nday),42);							
+					}
+				}		
+				
+				label = null;								
+				
+				var timer:Timer = new Timer(1000, 0);
+				timer.addEventListener(TimerEvent.TIMER, onTimer);
+				timer.start();	
+				
+			}					
+			
+			/*// load XML*/
+			protected function XMLconfig_resultHandler(event:ResultEvent):void
+			{				
+				liveUrl = event.result.config.liveurl;
+				
+				imageUrl = event.result.config.imageurl;
+				thumbUrl = event.result.config.thumburl;
+				reclist.url = event.result.config.reclisturl;
+				
+				saveurl = event.result.config.save.url;
+				serverurl = event.result.config.save.serverurl;
+				port = event.result.config.save.port;
+				channelname = event.result.config.save.channelname;
+				
+				reclist.send();
+				
+				videobackgroundColor = event.result.config.videobackgroundColor;				
+				progressBarColor = event.result.config.progressBarColor;
+				buttonColor = event.result.config.buttonColor;
+				stack = event.result.config.stack;
+				starttoendstack = event.result.config.starttoendstack;				
+				bufferTime = event.result.config.bufferTime;								
+			}						
+			
+			/*//Record List Result*/
+			protected function reclist_resultHandler(event:ResultEvent):void
+			{								
+				
+				var resultArrayCollection:ArrayCollection = event.result.content.recordlist.record;	
+				key = event.result.content.info.authkey;	
+				
+				//				Alert.show(  event.result.content.recordlist.record+"|"+resultArrayCollection[0].end);
+				
+				if(resultArrayCollection[0].end == 0){
+					
+					
+					if(Living == false){									
+						
+						
+						connection = new NetConnection(); 
+						connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+						connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+						connection.connect(liveUrl+"?key="+event.result.content.info.authkey);		
+						
+						Living = true;	
+					}		
+					
+					redStack = new Date().time;
+					
+				}else{
+					
+					mButtonLive.label = "GO LIVE";
+				}								
+				
+				var start:Number;
+				var end:Number;								
+				
+				// 10 Minutes
+				today = new Date;
+				for(i = 0; i < resultArrayCollection.length; i++){
+					start = resultArrayCollection[i].start;
+					end = resultArrayCollection[i].end;
+					
+					var beginMinute:Date = new Date();
+					beginMinute.date = beginMinute.date - 3;						
+					beginMinute.minutes = beginMinute.minutes - 5;
+					beginMinute.seconds = 0;
+					beginMinute.milliseconds = 0;
+					
+					var xStart10:Number = 25 + progressSize10/(1000*60*10*(minute+1)) * (start + startYear - beginMinute.time) ;
+					var xEnd10:Number;
+					if(end == 0){							
+						xEnd10 = 25 + progressSize10 / (1000*60*10*(minute+1)) * ( today.time - beginMinute.time);						
+					}else{
+						xEnd10 = 25 + progressSize10 / (1000*60*10*(minute+1)) * (end + startYear - beginMinute.time);	
+					}
+					
+					label = new Label;						
+					label.x = xStart10;
+					label.width = xEnd10 - xStart10;						
+					label.y = 25;
+					label.height = 10;
+					label.alpha = 0.7;
+					label.setStyle("backgroundColor", progressBarColor);					
+					label.addEventListener(MouseEvent.CLICK, ProgressBar_clickHandler);
+					label.addEventListener(MouseEvent.MOUSE_MOVE, ProgressBar_mouseMoveHandler);
+					label.addEventListener(MouseEvent.MOUSE_OUT, ProgressBar_mouseOutHandler);
+					labelProgress10ac.addItem(label);
+					mBorderContainerProgress10.addElementAt(label, i);									
+				}		
+				
+				// 2 Hour
+				today = new Date;
+				for(i = 0; i < resultArrayCollection.length; i++){
+					start = resultArrayCollection[i].start;
+					end = resultArrayCollection[i].end;
+					
+					var beginHour:Date = new Date();
+					beginHour.date = beginHour.date - 3;	
+					beginHour.hours = beginHour.hours -1;
+					beginHour.minutes = 0;
+					beginHour.seconds = 0;
+					beginHour.milliseconds = 0;
+					
+					var xStart:Number = 25 + progressSize/(1000*60*60*2*(hour+1)) * (start + startYear - beginHour.time);
+					var xEnd:Number;
+					if(end == 0){							
+						xEnd = 25 + progressSize / (1000*60*60*2*(hour+1)) * ( today.time - beginHour.time) ;						
+					}else{
+						xEnd = 25 + progressSize / (1000*60*60*2*(hour+1)) * (end + startYear - beginHour.time);	
+					}
+					
+					label = new Label;						
+					label.x = xStart;
+					label.width = xEnd-xStart;						
+					label.y = 25;
+					label.height = 10;
+					label.alpha = 0.7;
+					label.setStyle("backgroundColor", progressBarColor);					
+					label.addEventListener(MouseEvent.CLICK, ProgressBar_clickHandler);
+					label.addEventListener(MouseEvent.MOUSE_MOVE, ProgressBar_mouseMoveHandler);
+					label.addEventListener(MouseEvent.MOUSE_OUT, ProgressBar_mouseOutHandler);
+					labelProgressAC.addItem(label);
+					mBorderContainerProgress.addElementAt(label, i);										
+				}					
+				
+				// 24 Hour
+				today = new Date;
+				for(i = 0; i < resultArrayCollection.length; i++){
+					start = resultArrayCollection[i].start;
+					end = resultArrayCollection[i].end;
+					
+					var beginDate:Date = new Date();
+					beginDate.date = beginDate.date - 3;	
+					beginDate.hours = beginDate.hours -12;
+					beginDate.minutes = 0;
+					beginDate.seconds = 0;
+					beginDate.milliseconds = 0;
+					
+					var xStart24:Number = 25 + progressSize24 / (1000*60*60*24*(day+1)) * (start + startYear - beginDate.time);
+					var xEnd24:Number;
+					if(end == 0){							
+						xEnd24 = 25 + progressSize24 / (1000*60*60*24*(day+1)) * ( today.time - beginDate.time);																		
+					}else{
+						xEnd24 = 25 + progressSize24 / (1000*60*60*24*(day+1)) * (end + startYear - beginDate.time);						
+					}
+					
+					label = new Label;						
+					label.x = xStart24;
+					label.width = xEnd24 - xStart24;						
+					label.y = 25;
+					label.height = 10;
+					label.alpha = 0.7;
+					label.setStyle("backgroundColor", progressBarColor);
+					label.addEventListener(MouseEvent.CLICK, ProgressBar_clickHandler);
+					label.addEventListener(MouseEvent.MOUSE_MOVE, ProgressBar_mouseMoveHandler);
+					label.addEventListener(MouseEvent.MOUSE_OUT, ProgressBar_mouseOutHandler);
+					labelProgress24AC.addItem(label);
+					mBorderContainerProgress24.addElementAt(label, i);					
+				}
+				
+				minute = 6*24*3;
+				hour = 12*3;
+				day = 3;
+				
+				label = null;
+				start = null;
+				end = null;
+				
+			}			
+			
+			private function onTimer(event:TimerEvent):void{
+				
+				// 시계
+				today = new Date;	
+				if(mButtonLive.label == "LIVE"){
+					mTextInputCurrentDate.text = today.toDateString();
+					mTextInputCurrentTime.text = today.toLocaleTimeString();	
+				}													
+				
+				Begin10Minutes = new Date().time - new Date().milliseconds - new Date().seconds*1000 - 5*60*1000 - 72*60*60*1000;
+				Begin2Hour = new Date().time - new Date().milliseconds - new Date().seconds*1000 - new Date().minutes*60*1000 - 1*60*60*1000 - 72*60*60*1000;
+				Begin24Hour = new Date().time - new Date().milliseconds - new Date().seconds*1000 - new Date().minutes*60*1000 - 12*60*60*1000 - 72*60*60*1000;
+				
+				// Live 재생 중
+				if(Living){
+					
+					if(today.minutes == 0 && today.seconds == 0){
+						
+						// progress move
+						for(var i:int = 0; i<labelProgressAC.length; i++){
+							
+							label = labelProgressAC.getItemAt(i) as Label;
+							label.x = label.x - (progressBarSize-50)/2;							
+						}		
+						
+						for(var i:int = 0; i<labelProgress24AC.length; i++){
+							
+							label = labelProgress24AC.getItemAt(i) as Label;
+							label.x = label.x - (progressBarSize-50)/24;							
+						}						
+						
+						
+						// Time Label change
+						var label1:Date = new Date;
+						label1.hours = label1.hours - 1;
+						
+						for(var i:int = 0; i<labelAC.length; i++){
+							label = labelAC.getItemAt(i) as Label;
+							label.text = label1.hours+":"+label1.minutes;
+							label1.minutes = label1.minutes +30;
+						}
+						
+						var label24:Date = new Date;
+						label24.hours = label24.hours - 12;
+						
+						for(var i:int = 0; i<label24AC.length; i++){
+							label = label24AC.getItemAt(i) as Label;
+							label.text = label24.hours+":"+label24.minutes;
+							label24.hours = label24.hours +4;
+						}
+						
+						
+					}else if(today.seconds == 0){
+						
+						for(var i:int = 0; i<labelProgress10ac.length; i++){
+							
+							label = labelProgress10ac.getItemAt(i) as Label;
+							label.x = label.x - (progressBarSize-50)/10;							
+						}	
+						
+						var label10:Date = new Date;
+						label10.minutes = label10.minutes - 5;
+						
+						for(var i:int = 0; i<label10ac.length; i++){
+							label = label10ac.getItemAt(i) as Label;
+							label.text = label10.hours+":"+label10.minutes;
+							label10.minutes = label10.minutes + 5;
+						}																
+					}					
+					
+					mBorderContainerProgress10.getElementAt(0).width = 25 + progressSize10/(1000*60*10*(6*24*10+1)) * ( today.time - Begin10Minutes) - mBorderContainerProgress10.getElementAt(0).x;				
+					mBorderContainerProgress.getElementAt(0).width = 25 + progressSize/(1000*60*60*2*(12*10+1)) * ( today.time - Begin2Hour) - mBorderContainerProgress.getElementAt(0).x;													
+					mBorderContainerProgress24.getElementAt(0).width = 25 + progressSize24/(1000*60*60*24*(10+1)) * ( today.time - Begin24Hour) - mBorderContainerProgress24.getElementAt(0).x;										
+					
+				}
+				
+			}
+			
+			// Hour Change
+			protected function mButtonBar_changeHandler(event:IndexChangeEvent):void
+			{
+				if(mButtonBar.selectedIndex == 0){
+					// 5 Minu
+					mBorderContainerProgress10.visible = true					
+					mBorderContainerProgress.visible = false;		
+					mBorderContainerProgress24.visible = false;					
+				}else if(mButtonBar.selectedIndex == 1){					
+					// 1 Hour					
+					mBorderContainerProgress10.visible = false							
+					mBorderContainerProgress.visible = true;
+					mBorderContainerProgress24.visible = false;							
+				}else{
+					// 24 Hour
+					mBorderContainerProgress10.visible = false							
+					mBorderContainerProgress.visible = false;
+					mBorderContainerProgress24.visible = true;							
+				}
+			}
+			
+			//Live Button Click
+			protected function mButtonLive_clickHandler(event:MouseEvent):void
+			{		
+				if(Living){					
+					
+					minute = 72*6;
+					hour = 36;
+					day = 3;
+					
+					mTextInputStart.text = "";
+					
+					if(mButtonLive.label == "LIVE"){					
+						return;
+					}
+					
+					redStack = new Date().time;
+					mButtonLive.label = "LIVE";
+					
+					if(video != null){
+						mVideoDisplay.removeChild(video);	
+						video.clear();
+					}
+					
+					if(connection.connected){
+						connection.close();
+						stream.close();
+					}
+					
+					connection = new NetConnection(); 
+					connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+					connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+					connection.connect(liveUrl+"?key="+key);
+					
+				}else{
+					return;
+				}
+				
+				
+			}
+			
+			//Start Button Click
+			protected function mButtonStrat_clickHandler(event:MouseEvent):void
+			{			
+				
+				mTextInputEnd.text = "";
+				
+				var starttime:Number;
+				
+				if(mButtonBar.selectedIndex == 0){
+					
+					today = new Date;
+					today.date = today.date - 3;					
+					today.minutes = today.minutes - 5;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					test.text = new Date(today.time + (72*6*10*60*1000)*(mLineRed10.x-25)/((progressBarSize-50)*72*6)).toString();
+					starttime = today.time - startYear + (72*6*10*60*1000)*(mLineRed10.x-25)/((progressBarSize-50)*72*6);
+					
+				}else if(mButtonBar.selectedIndex == 1){
+					
+					today = new Date;
+					today.date = today.date - 3;
+					today.hours = today.hours - 1;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;					
+					
+					test.text = new Date(today.time + (36*2*60*60*1000)*(mLineRed.x-25)/((progressBarSize-50)*36)).toString();
+					starttime = today.time - startYear + (36*2*60*60*1000)*(mLineRed.x-25)/((progressBarSize-50)*36);
+					
+					
+					
+				}else if(mButtonBar.selectedIndex == 2){														
+					
+					today = new Date;
+					today.date = today.date - 3;
+					today.hours = today.hours - 12;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;					
+					
+					test.text = new Date(today.time + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4)).toString();
+					starttime = today.time - startYear + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4);
+				}
+				
+				mTextInputStart.text = new Date(starttime+startYear).toLocaleString();
+			}
+			
+			//End Button Click
+			protected function mButtonEnd_clickHandler(event:MouseEvent):void
+			{
+				var endtime:Number;
+				
+				if(mButtonBar.selectedIndex == 0){
+					
+					today = new Date;
+					today.date = today.date - 3;					
+					today.minutes = today.minutes - 5;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					
+					test.text = new Date(today.time + (72*6*10*60*1000)*(mLineRed10.x-25)/((progressBarSize-50)*72*6)).toString();
+					endtime = today.time - startYear + (72*6*10*60*1000)*(mLineRed10.x-25)/((progressBarSize-50)*72*6);
+					
+				}else if(mButtonBar.selectedIndex == 1){
+					
+					today = new Date;
+					today.date = today.date - 3;
+					today.hours = today.hours - 1;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					
+					test.text = new Date(today.time + (36*2*60*60*1000)*(mLineRed.x-25)/((progressBarSize-50)*36)).toString();
+					endtime = today.time - startYear + (36*2*60*60*1000)*(mLineRed.x-25)/((progressBarSize-50)*36);
+					
+				}else if(mButtonBar.selectedIndex == 2){														
+					
+					today = new Date;
+					today.date = today.date - 3;
+					today.hours = today.hours - 12;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					
+					test.text = new Date(today.time + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4)).toString();
+					endtime = today.time - startYear + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4);
+				}
+				
+				mTextInputEnd.text = new Date(endtime+startYear).toLocaleString();
+				
+			}			
+			
+			//Preview Button
+			protected function mButtonPrePlay_clickHandler(event:MouseEvent):void
+			{
+				
+				if(video != null){
+					mVideoDisplay.removeChild(video);	
+					video.clear();
+				}
+				
+				mButtonLive.label = "GO LIVE";
+				
+				var pretime:Number = new Date(mTextInputStart.text).time - startYear;
+				pre_startTime = new Date(mTextInputStart.text).time - startYear;
+				pre_endTime = new Date(mTextInputEnd.text).time - startYear;
+				
+				redStackPoint = redStack =  new Date(mTextInputStart.text).time;
+				
+				if(connection.connected){
+					connection.close();
+					stream.close();
+				}
+				connection = new NetConnection(); 
+				connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				connection.connect(liveUrl+"?timeoffset="+pretime+"&key="+key);	
+				
+			}
+			
+			var popSave:PopUpSaveWindow = new PopUpSaveWindow;
+			
+			//Save Button
+			protected function mButtonSave_clickHandler(event:MouseEvent):void
+			{								
+				if(getConfirm()){
+					
+					popSave = new PopUpSaveWindow;
+					popSave.owner = this;	
+					popSave.width = 600;
+					popSave.title_input = getTitle_input();
+					popSave.saveurl = saveurl;
+					popSave.serverurl = serverurl;
+					popSave.port = port;
+					popSave.channelname = channelname;
+					popSave.start = mTextInputStart.text;
+					popSave.end = mTextInputEnd.text;
+					PopUpManager.addPopUp(popSave,this,false);
+					PopUpManager.centerPopUp(popSave);
+				}else{
+					
+					var params:URLVariables = new URLVariables();	
+					params.src = httpEncoding(serverurl +"|"+ port +"|"+ channelname);
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputStart.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputEnd.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					
+					saveurl+="&src="+params.src;
+					newGUID = UIDUtil.createUID();
+					saveurl+="&guid="+httpEncoding(newGUID);
+					//예약 여부 판단
+					var reserve:Boolean = new Date(mTextInputEnd.text).time > new Date().time;
+					if( reserve ){
+						params.type = httpEncoding("reserve");	
+						saveurl+="&type="+params.type;
+					}
+					
+//					Alert.show(saveurl);	
+//					callJs();
+					save.url = saveurl;
+					save.send();		
+					
+				}
+													
+			}		
+			
+			// Progress Bar Click
+			protected function ProgressBar_clickHandler(event:MouseEvent):void
+			{
+				//				if((event.stageX - mBorderContainerProgress.x)<25 || (event.stageX - mBorderContainerProgress.x)>progressBarSize-25){
+				//					return;
+				//				}
+				
+				//				if(video != null){					
+				//					video.clear();	
+				//					mVideoDisplay.removeChild(video);
+				//				}
+				//												
+				//				mButtonLive.label = "GO LIVE";
+				//				
+				//				var filetime:Number;				
+				//				
+				//				if(mButtonBar.selectedIndex == 0){
+				//					
+				//					today = new Date;	
+				//					today.hours = today.hours;
+				//					today.minutes = today.minutes - 5;
+				//					today.seconds = 0;
+				//					today.milliseconds = 0;
+				//					
+				//					for(var n:int = 0; n<(72*6-minute); n++){
+				//						today.minutes = today.minutes -10;
+				//					}
+				//					
+				//					filetime = today.time - startYear + Math.floor(10*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));
+				//					
+				//				}else if(mButtonBar.selectedIndex == 1){	
+				//					
+				//					today = new Date;	
+				//					today.hours = today.hours - 1;
+				//					today.minutes = 0;
+				//					today.seconds = 0;
+				//					today.milliseconds = 0;
+				//					
+				//					for(var n:int = 0; n<(36-hour); n++){
+				//						today.hours = today.hours -2;
+				//					}
+				//					
+				//					filetime = today.time - startYear + Math.floor(2*60*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));		
+				//					
+				//				}else if(mButtonBar.selectedIndex == 2){	
+				//					
+				//					today = new Date;						
+				//					today.hours = today.hours - 12;
+				//					today.minutes = 0;
+				//					today.seconds = 0;
+				//					today.milliseconds = 0;
+				//					
+				//					for(var n:int = 0; n<(3-day); n++){
+				//						today.date = today.date - 1;
+				//					}					
+				//					
+				//					filetime = today.time - startYear + Math.floor(24*60*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));		
+				//					
+				//				}
+				//				
+				//				redStackPoint = redStack = filetime + startYear;			
+				//				
+				//				if(connection.connected){
+				//					connection.close();
+				//					stream.close();
+				//				}
+				//				
+				//				connection = new NetConnection(); 
+				//				connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				//				connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				//				connection.connect(liveUrl+"?timeoffset="+filetime+"&key="+key);	
+				
+			}
+			
+			var pop : PopUpThumbsWindow = new PopUpThumbsWindow;
+			
+			// Progress Bar Mouse Move
+			protected function ProgressBar_mouseMoveHandler(event:MouseEvent):void
+			{			
+				if((event.stageX - mBorderContainerProgress.x)<25 || (event.stageX - mBorderContainerProgress.x)>progressBarSize-25){
+					return;
+				}
+				
+				var thumbtime:Number;
+				
+				if(mButtonBar.selectedIndex == 0){
+					today = new Date;	
+					today.hours = today.hours;
+					today.minutes = today.minutes - 5;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					for(var n:int = 0; n<(72*6-minute); n++){
+						today.minutes = today.minutes -10;
+					}
+					
+					thumbtime = today.time - startYear + Math.floor(10*60*1000*(event.stageX - mBorderContainerProgress10.x -25)/(progressBarSize-50));
+				}else if(mButtonBar.selectedIndex == 1){
+					
+					today = new Date;	
+					today.hours = today.hours - 1;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					for(var n:int = 0; n<(36-hour); n++){
+						today.hours = today.hours -2;
+					}
+					
+					thumbtime = today.time - startYear + Math.floor(2*60*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));
+				}else if(mButtonBar.selectedIndex == 2){
+					
+					today = new Date;						
+					today.hours = today.hours - 12;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					for(var n:int = 0; n<(3-day); n++){
+						today.date = today.date - 1;
+					}					
+					
+					thumbtime = today.time - startYear + Math.floor(24*60*60*1000*(event.stageX - mBorderContainerProgress24.x -25)/(progressBarSize-50));
+				}												
+				
+				PopUpManager.removePopUp(pop);
+				pop = new PopUpThumbsWindow;
+				pop.owner = this;
+				pop.x = event.stageX - 90;
+				pop.y = progressBar.y - 120;
+				pop.thumburl = thumbUrl;
+				pop.timeoffset = thumbtime.toString();				
+				PopUpManager.addPopUp(pop, this);
+				
+			}			
+			
+			// Progress Bar Mouse Out
+			protected function ProgressBar_mouseOutHandler(event:MouseEvent):void
+			{											
+				PopUpManager.removePopUp(pop);								
+			}						
+			
+			private function netStreamStatusHandler(event:NetStatusEvent):void { 
+				//				Alert.show(event.info.code);
+				
+				//				if(event.info.code == "NetStream.Play.StreamNotFound"){
+				//					
+				//					connection = new NetConnection(); 
+				//					connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				//					connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				//					connection.connect(liveUrl+"?key="+key);
+				//				}
+			}
+			
+			private function netStatusHandler(event:NetStatusEvent):void { 
+				
+				//				Alert.show(event.info.code);
+				
+				
+				if(event.info.code == "NetConnection.Connect.Success"){
+					
+					var soundTransform:SoundTransform = new SoundTransform();
+					soundTransform.volume = 1;
+					
+					stream = new NetStream(connection);										
+					stream.soundTransform = soundTransform;
+					stream.bufferTime = bufferTime;									
+					stream.addEventListener(NetStatusEvent.NET_STATUS, netStreamStatusHandler); 
+					stream.addEventListener(AsyncErrorEvent.ASYNC_ERROR, asyncErrorHandler); 
+					video = new Video(bVideoDisplay.width, bVideoDisplay.width/16*9); 
+					//						video.cacheAsBitmap = true;						
+					video.smoothing = true;		
+					video.attachNetStream(stream); 
+					video.addEventListener(Event.ENTER_FRAME, EnterFrameHandler);
+					stream.play(liveUrl);  
+					//						stream.play("red5");
+					mVideoDisplay.addChild(video); 			
+				}
+				//				if(event.info.code == "NetStream.Play.StreamNotFound"){
+				//					
+				//					connection = new NetConnection(); 
+				//					connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				//					connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				//					connection.connect(liveUrl+"?key="+key);
+				//				}
+				//				else{
+				//					
+				//					connection = new NetConnection(); 
+				//					connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				//					connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				//					connection.connect(liveUrl+"?key="+key);	
+				//				}
+				
+			} 
+			
+			private function securityErrorHandler(event:SecurityErrorEvent):void 
+			{ 
+				trace("securityErrorHandler: " + event); 
+			} 
+			
+			private function EnterFrameHandler(event:Event):void 
+			{ 
+				test.text = redStackPoint +"|"+ redStack;
+				
+				if(mButtonLive.label == "LIVE"){
+					
+					redStack = new Date().time;	
+				}else{
+					
+					if(stream.time*1000 > 0){
+						redStack = redStackPoint + stream.time*1000;	
+						
+						today = new Date;
+						today.date = today.date - 3;
+						today.hours = today.hours - 12;
+						today.minutes = 0;
+						today.seconds = 0;
+						today.milliseconds = 0;					
+						
+						test.text = new Date(today.time + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4)).toString();
+						var starttime:Number = today.time + (4*24*60*60*1000)*(mLineRed24.x-25)/((progressBarSize-50)*4);
+						
+						mTextInputCurrentDate.text = new Date(starttime).toDateString();
+						mTextInputCurrentTime.text = new Date(starttime).toLocaleTimeString();	
+						
+						
+						
+						if(pre_endTime != 0 && new Date(starttime).time-startYear >= pre_endTime){
+							
+							stream.pause();
+							pre_endTime = 0;
+						}
+						
+//						if(pre_startTime > new Date(starttime).time-startYear || pre_endTime < new Date(starttime).time-startYear){
+//							
+//						}
+					}					
+				}								
+			} 
+			
+			private function asyncErrorHandler(event:AsyncErrorEvent):void { 
+				
+			} 			
+			
+			//progress Left Button Click
+			protected function mButtonPreview_clickHandler(event:MouseEvent):void
+			{					
+				
+				if(mButtonBar.selectedIndex == 0){
+					if(minute == 0){
+						return;
+					}
+					minute--;
+					
+				}else if(mButtonBar.selectedIndex == 1){		
+					if(hour == 0){
+						return;
+					}
+					hour--;		
+					
+				}else if(mButtonBar.selectedIndex == 2){
+					if(day==0){
+						return;
+					}
+					day--;					
+					
+				}									
+			}
+			
+			//progress Right Button Click
+			protected function mButtonNext_clickHandler(event:MouseEvent):void
+			{				
+				if(mButtonBar.selectedIndex == 0){
+					if(minute == 6*24*10){
+						return;
+					}
+					minute++;
+					
+				}else if(mButtonBar.selectedIndex == 1){		
+					if(hour == 12*10){
+						return;
+					}
+					hour = hour+1;
+					
+				}else if(mButtonBar.selectedIndex == 2){
+					if(day==10){
+						return;
+					}
+					day++;
+					
+				}							
+			}									
+			
+			// Http Error
+			protected function faultHandler(event:FaultEvent):void
+			{
+				Alert.show(event.fault.faultString, "Error");
+				
+			}
+			
+			protected function p_clickHandler(event:MouseEvent, p:int):void
+			{		
+				
+				if(video != null){
+					mVideoDisplay.removeChild(video);	
+					video.clear();
+				}
+				
+				if(connection.connected){
+					connection.close();
+					stream.close();
+				}
+				if(p == 25){
+					bVideoDisplay.width = 200;
+				}
+				else if(p == 50){
+					bVideoDisplay.width = 400;
+				}
+				else{					
+					bVideoDisplay.width = 790;					
+				}
+				
+				connection = new NetConnection(); 
+				connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				connection.connect(liveUrl+"?key="+key);	
+				
+			}
+			
+			protected function mBorderContainerProgress_clickHandler(event:MouseEvent):void
+			{
+				if(video != null){					
+					video.clear();	
+					mVideoDisplay.removeChild(video);
+				}
+				
+				mButtonLive.label = "GO LIVE";
+				
+				var filetime:Number;				
+				
+				if(mButtonBar.selectedIndex == 0){
+					
+					today = new Date;	
+					today.hours = today.hours;
+					today.minutes = today.minutes - 5;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					today.minutes = today.minutes -10*(72*6-minute);					
+					
+					filetime = today.time - startYear + Math.floor(10*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));
+					
+				}else if(mButtonBar.selectedIndex == 1){	
+					
+					today = new Date;	
+					today.hours = today.hours - 1;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					today.hours = today.hours -2*(36-hour);					
+					
+					filetime = today.time - startYear + Math.floor(2*60*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));		
+					
+				}else if(mButtonBar.selectedIndex == 2){	
+					
+					today = new Date;						
+					today.hours = today.hours - 12;
+					today.minutes = 0;
+					today.seconds = 0;
+					today.milliseconds = 0;
+					
+					today.date = today.date - (3-day);			
+					
+					filetime = today.time - startYear + Math.floor(24*60*60*1000*(event.stageX - mBorderContainerProgress.x -25)/(progressBarSize-50));							
+				}
+				
+				redStackPoint = redStack = filetime + startYear;			
+				
+				if(connection.connected){
+					connection.close();
+					stream.close();
+				}
+				
+				connection = new NetConnection(); 
+				connection.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler); 
+				connection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, securityErrorHandler); 
+				connection.connect(liveUrl+"?timeoffset="+filetime+"&key="+key);	
+				
+				if(new Date(filetime+startYear).time < pre_startTime+startYear || pre_endTime+startYear < new Date(filetime+startYear).time ){
+//					Alert.show(new Date(filetime+startYear).time+"|"+pre_startTime+"|"+(pre_startTime+startYear));
+					pre_endTime = 0;
+				}
+//								Alert.show(new Date(filetime+startYear).toLocaleString()+"|"+filetime);
+			}
+			
+			protected function URLconfig_resultHandler(event:ResultEvent):void
+			{
+				
+				var urlString:String = event.result.config.Config;
+				if(getCname() != ""){
+					urlString+="?cname="+getCname();
+				}
+//				Alert.show(urlString);
+				XMLconfig.url = urlString
+				XMLconfig.send();
+			}
+			
+			protected function save_resultHandler(event:ResultEvent):void
+			{				
+				mTextInputStart.text = "";
+				callJs(newGUID);
+			}
+			
+			// Http Error
+			protected function save_faultHandler(event:FaultEvent):void
+			{
+				callJs("error");
+				Alert.show(event.fault.faultString+"\nCMS URL = "+save.url, "Error");
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>				
+		
+		<s:Scale id="addmScale" duration="2000" scaleXFrom="0" scaleXTo="1"/> 
+		<s:Scale id="mScale" duration="500" scaleXFrom="0" scaleXTo="1"/> 
+		<s:Scale id="mScale2" duration="3000" scaleXFrom="1" scaleXTo="2"/> 
+		<s:Move id="mMove" duration="3000" xTo="0"/>
+		<s:Resize id="mResize" duration="3000" widthTo="0"/>				
+		
+		<s:HTTPService id="URLconfig" fault="faultHandler(event)"
+					   result="URLconfig_resultHandler(event)" showBusyCursor="true"
+					   url="config.xml"/>
+		
+		<s:HTTPService id="XMLconfig" fault="faultHandler(event)"
+					   result="XMLconfig_resultHandler(event)" showBusyCursor="true"/>
+		
+		<s:HTTPService id="reclist" fault="faultHandler(event)" result="reclist_resultHandler(event)"
+					   showBusyCursor="true"/>		
+		
+		<s:HTTPService id="save" fault="save_faultHandler(event)" method="GET"
+					   result="save_resultHandler(event)" showBusyCursor="true"/>
+		
+	</fx:Declarations>
+	
+	<s:BorderContainer id="main" styleName="myBorderContainer">		
+		<s:layout>
+			<s:VerticalLayout gap="0" horizontalAlign="center" paddingBottom="10" paddingTop="10"
+							  verticalAlign="middle"/>
+		</s:layout>
+		
+		<s:BorderContainer id="bVideoDisplay" width="790" height="{bVideoDisplay.width/16*9}"
+						   backgroundColor="{videobackgroundColor}">
+			<s:VideoDisplay id="mVideoDisplay" autoPlay="true" autoRewind="false" loop="false"
+							scaleMode="letterbox"/>				
+		</s:BorderContainer>
+		
+		<!--menu bar 1-->
+		<s:BorderContainer width="{790+10}" horizontalCenter="0" styleName="myBorderContainer">			
+			<s:layout>
+				<s:HorizontalLayout gap="10" paddingBottom="10" paddingLeft="10" paddingRight="10"
+									paddingTop="10" verticalAlign="bottom"/>
+			</s:layout>
+			
+			<s:ButtonBar id="mButtonBar" height="30" change="mButtonBar_changeHandler(event)"
+						 requireSelection="true" selectedIndex="1">
+				<s:layout>
+					<s:ButtonBarHorizontalLayout gap="10"/>					
+				</s:layout>
+				<s:dataProvider>
+					<s:ArrayList source="[10 Minutes,2 Hour,24 Hour]"/>
+				</s:dataProvider>
+			</s:ButtonBar>									
+			
+			<s:Button id="p25" height="30" label="25%" click="p_clickHandler(event, 25)"/>
+			<s:Button id="p50" height="30" label="50%" click="p_clickHandler(event, 50)"/>
+			<s:Button id="p100" height="30" label="100%" click="p_clickHandler(event, 100)"/>
+			<s:BorderContainer width="100%" height="100%" styleName="myBorderContainer">	
+				<s:layout>
+					<s:VerticalLayout gap="0" verticalAlign="bottom"/>
+				</s:layout>
+				<s:Label id="mTextInputCurrentTime" width="100%" fontSize="17" textAlign="right"/>		
+				<s:Label id="mTextInputCurrentDate" width="100%" textAlign="right"/>						
+			</s:BorderContainer>			
+			<s:Button id="mButtonLive" height="30" label="LIVE"
+					  click="mButtonLive_clickHandler(event)"/>
+		</s:BorderContainer>
+		
+		<!--menu bar 2-->
+		<s:BorderContainer width="{790+10}" styleName="myBorderContainer">			
+			<s:layout>
+				<s:HorizontalLayout gap="10" paddingLeft="10" paddingRight="10"/>
+			</s:layout>
+			
+			<s:Button id="mButtonStrat" height="30" label="Start" chromeColor="{buttonColor}"
+					  click="mButtonStrat_clickHandler(event)"/>
+			<s:BorderContainer width="25%" styleName="myBorderContainer">
+				<s:layout>
+					<s:VerticalLayout gap="0" verticalAlign="bottom"/>
+				</s:layout>
+				<s:TextInput id="mTextInputStart" width="100%" textAlign="center" verticalCenter="0"/>
+				<s:Label width="100%" height="3" backgroundColor="#3366ff"/>				
+			</s:BorderContainer>				
+			
+			<s:Button id="mButtonEnd" height="30" label="End" chromeColor="{buttonColor}"
+					  click="mButtonEnd_clickHandler(event)" enabled="{mTextInputStart.text != ''}"/>			
+			<s:BorderContainer width="25%" styleName="myBorderContainer">
+				<s:layout>
+					<s:VerticalLayout gap="0" verticalAlign="bottom"/>
+				</s:layout>
+				<s:TextInput id="mTextInputEnd" width="100%" enabled="{mTextInputStart.text != ''}"
+							 text="{mTextInputStart.text != ''? mTextInputEnd.text:''}"
+							 textAlign="center" verticalCenter="0"/>	
+				<s:Label width="100%" height="3" backgroundColor="#3366ff"/>				
+			</s:BorderContainer>
+			
+			<s:Button id="mButtonPrePlay" height="30" label="Preview" chromeColor="{buttonColor}"
+					  click="mButtonPrePlay_clickHandler(event)"
+					  enabled="{mTextInputEnd.text != ''}"/>	
+			
+			<s:Button id="mButtonSave" height="30" label="Save" chromeColor="{buttonColor}"
+					  click="mButtonSave_clickHandler(event)"
+					  enabled="{mTextInputEnd.text != '' &amp;&amp; mConfirm}"/>
+			
+		</s:BorderContainer>											
+		
+		<!--menu bar 3-->
+		<s:BorderContainer id="progressBar" width="100%" styleName="myBorderContainer">
+			<s:layout>
+				<s:BasicLayout/>
+			</s:layout>
+			
+			<!--progress bar 10 Minutes-->
+			<s:BorderContainer id="mBorderContainerProgress10" visible="false"
+							   width="{progressBarSize}" height="70"
+							   click="mBorderContainerProgress_clickHandler(event)"
+							   horizontalCenter="0"
+							   scrollRect="{new Rectangle(minute*(progressBarSize-50),0 , progressBarSize, 70)}"
+							   showEffect="{mScale}" styleName="myBorderContainer"
+							   verticalCenter="0">																														
+				
+				<s:Label x="{25 + progressSize10 * (new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time - Begin10Minutes)/(1000*60*10*(6*24*10+1))}"
+						 y="25"
+						 width="{progressSize10 /(1000*60*10*(6*24*10+1)) * (new Date(mTextInputEnd.text == ''? null:mTextInputEnd.text).time - new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time)}"
+						 height="10" alpha="0.8" backgroundColor="{starttoendstack}"
+						 click="ProgressBar_clickHandler(event)"
+						 mouseMove="ProgressBar_mouseMoveHandler(event)"
+						 mouseOut="ProgressBar_mouseOutHandler(event)"/>
+				
+				<s:Line id="mLineRed10"
+						x="{25 + progressSize10 * (redStack - Begin10Minutes)/(1000*60*10*(6*24*10+1))}"
+						depth="100" yFrom="0" yTo="35">
+					<s:stroke>
+						<s:SolidColorStroke alpha="0.8" caps="square" color="{stack}" weight="2"/>
+					</s:stroke>
+				</s:Line>				
+				
+			</s:BorderContainer>	
+			
+			<!--progress bar 2 Hour-->
+			<s:BorderContainer id="mBorderContainerProgress" width="{progressBarSize}" height="70"
+							   addedEffect="{mScale}"
+							   click="mBorderContainerProgress_clickHandler(event)"
+							   horizontalCenter="0"
+							   scrollRect="{new Rectangle(hour*(progressBarSize-50),0 , progressBarSize, 70)}"
+							   showEffect="{mScale}" styleName="myBorderContainer"
+							   verticalCenter="0">																														
+				
+				<s:Label x="{25 + progressSize * (new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time - Begin2Hour)/(1000*60*60*2*(12*10+1))}"
+						 y="25"
+						 width="{progressSize /(1000*60*60*2*(12*10+1)) * (new Date(mTextInputEnd.text == ''? null:mTextInputEnd.text).time - new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time)}"
+						 height="10" alpha="0.8" backgroundColor="{starttoendstack}"
+						 click="ProgressBar_clickHandler(event)"
+						 mouseMove="ProgressBar_mouseMoveHandler(event)"
+						 mouseOut="ProgressBar_mouseOutHandler(event)"/>
+				
+				<s:Line id="mLineRed"
+						x="{25 + progressSize * (redStack - Begin2Hour)/(1000*60*60*2*(12*10+1))}"
+						depth="100" yFrom="0" yTo="35">
+					<s:stroke>
+						<s:SolidColorStroke alpha="0.8" caps="square" color="{stack}" weight="2"/>
+					</s:stroke>
+				</s:Line>				
+				
+			</s:BorderContainer>		
+			
+			<!--progress bar 24 Hour-->
+			<s:BorderContainer id="mBorderContainerProgress24" visible="false"
+							   width="{progressBarSize}" height="70"
+							   click="mBorderContainerProgress_clickHandler(event)"
+							   horizontalCenter="0"
+							   scrollRect="{new Rectangle(day*(progressBarSize-50),0 , progressBarSize, 70)}"
+							   showEffect="{mScale}" styleName="myBorderContainer"
+							   verticalCenter="0">																													
+				
+				<s:Label x="{25 + progressSize24 /(1000*60*60*24*(10+1)) * (new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time - Begin24Hour)}"
+						 y="25"
+						 width="{progressSize24 /(1000*60*60*24*(10+1)) * (new Date(mTextInputEnd.text == ''? null:mTextInputEnd.text).time - new Date(mTextInputStart.text == ''? null:mTextInputStart.text).time)}"
+						 height="10" alpha="0.8" backgroundColor="{starttoendstack}"
+						 click="ProgressBar_clickHandler(event)"
+						 mouseMove="ProgressBar_mouseMoveHandler(event)"
+						 mouseOut="ProgressBar_mouseOutHandler(event)"/>
+				
+				<s:Line id="mLineRed24"
+						x="{25 + progressSize24 * (redStack - Begin24Hour)/(1000*60*60*24*(10+1))}"
+						depth="100" yFrom="0" yTo="35">
+					<s:stroke>
+						<s:SolidColorStroke alpha="0.8" caps="square" color="{stack}" weight="2"/>
+					</s:stroke>
+				</s:Line>				
+				
+			</s:BorderContainer>	
+			
+			<s:Button id="mButtonPreview" width="35" height="35" label="《"
+					  chromeColor="{buttonColor}" click="mButtonPreview_clickHandler(event)"
+					  horizontalCenter="-375" name="button" verticalCenter="0"/>					
+			<s:Button id="mButtonNext" width="35" height="35" label="》" chromeColor="{buttonColor}"
+					  click="mButtonNext_clickHandler(event)" horizontalCenter="375" name="button"
+					  verticalCenter="0"/>
+			
+		</s:BorderContainer>
+		<s:TextInput id="test" visible="false" width="100%"/>			
+	</s:BorderContainer>
+	
+</s:Application>

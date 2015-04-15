@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   close="closeHandler()" creationComplete="creationCompleteHandler(event)"
+			   fontSize="20" title="Video Info">
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		
+		@font-face{
+			src: url('./font/arial.ttf');
+			fontFamily: "malgun";
+		}
+		/*@font-face 
+		{ 
+			src:url(C:\Windows\Fonts\arial.ttf);
+			fontFamily: malgun;			
+		}*/
+		
+		.myBorderContainer
+		{						
+			borderVisible:false;
+			fontFamily:malgun;
+		}
+		
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import flash.external.ExternalInterface;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.UIDUtil;
+						
+			[Bindable]public var title_input:Boolean = false;   
+			[Bindable]public var start:String;   
+			[Bindable]public var end:String;
+			
+			public var saveurl:String;
+			public var serverurl:String;
+			public var port:String;
+			public var channelname:String;
+			
+			private var newGUID:String;
+			
+			private function httpEncoding(param:String):String{
+				return encodeURIComponent(param);
+			}	
+			
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{						
+				
+				
+//				Alert.show(saveurl+"||||||"+serverurl+port+channelname);
+			}
+						
+			/*PopUp Save*/
+			protected function clickHandler(event:MouseEvent):void
+			{			
+				
+				if(mTextInputSubject.text == "" || mTextInputContent.text == ""){
+					
+					Alert.show("제목과 내용을 입력하세요!");
+				}else{
+					
+					var params:URLVariables = new URLVariables();	
+					params.src = httpEncoding(serverurl +"|"+ port +"|"+ channelname);
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputStart.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					params.src = params.src + httpEncoding("|"+ (new Date(mTextInputEnd.text).time - (new Date(-1899,0,1,0,0,0).time - new Date().timezoneOffset*60*1000)));				
+					//				params.transmit = httpEncoding(dropdownlist.selectedItem.value);
+					
+					saveurl+="&src="+params.src;
+					newGUID = UIDUtil.createUID();
+					saveurl+="&guid="+httpEncoding(newGUID);
+					//예약 여부 판단
+					var reserve:Boolean = new Date(mTextInputEnd.text).time > new Date().time;
+					if( reserve ){
+						params.type = httpEncoding("reserve");	
+						saveurl+="&type="+params.type;
+					}
+					
+					if(title_input){
+						
+						params.title = httpEncoding(mTextInputSubject.text);
+						params.content = httpEncoding(mTextInputContent.text);
+						saveurl+="&title="+params.title;
+						saveurl+="&content="+params.content;
+					}
+					
+					//				Alert.show(saveurl);		
+					save.url = saveurl;
+					save.send();
+					
+				}
+						
+			}
+						
+			protected function save_resultHandler(event:ResultEvent):void
+			{				
+				(this.parentDocument.mTextInputStart as TextInput).text = "";
+				callJs();
+				closeHandler();
+				
+			}
+			
+			public function callJs():void {
+				
+				var f:String = "setData";
+				var result:Boolean = ExternalInterface.call(f,newGUID, mTextInputSubject.text, mTextInputContent.text);
+				
+				if(!result){
+					
+					Alert.show("setUid Error.");
+				}
+			}
+			
+			protected function faultHandler(event:FaultEvent):void
+			{				
+//				Alert.show(event.fault.faultString, "Error");			
+			}
+			
+			/*Close PopUp*/
+			protected function closeHandler():void
+			{
+				PopUpManager.removePopUp(this);
+			}			
+						
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		
+		
+		<s:HTTPService id="save" fault="faultHandler(event)" method="GET"
+					   result="save_resultHandler(event)" showBusyCursor="true"/>
+		
+	</fx:Declarations>
+	
+	<s:BorderContainer width="100%" height="100%" fontSize="20" styleName="myBorderContainer">
+		
+		<s:layout>
+			<s:VerticalLayout gap="10" paddingBottom="10" paddingLeft="10" paddingRight="10"
+							  paddingTop="10"/>
+		</s:layout>
+		
+		<mx:Grid width="100%" height="100%">
+			<mx:GridRow width="100%" visible="{title_input}" includeInLayout="{title_input}">
+				<mx:GridItem width="33%" verticalAlign="middle">
+					<s:Label id="subject" width="100%" text="Subject"/>
+				</mx:GridItem>
+				<mx:GridItem width="100%" verticalAlign="middle">
+					<s:TextInput id="mTextInputSubject" width="100%"/>
+				</mx:GridItem>
+			</mx:GridRow>
+			
+			<mx:GridRow width="100%" visible="{title_input}" includeInLayout="{title_input}">
+				<mx:GridItem width="33%" verticalAlign="middle">
+					<s:Label id="content" width="100%" text="Contents"/>
+				</mx:GridItem>
+				<mx:GridItem>
+					<s:TextArea id="mTextInputContent" width="100%" height="100"/>
+				</mx:GridItem>
+			</mx:GridRow>
+			
+			<!--<mx:GridRow width="100%">
+				<mx:GridItem width="33%" verticalAlign="middle">
+					<s:Label width="100%" text="Transmit" />
+				</mx:GridItem>
+				<mx:GridItem>						
+					<s:DropDownList id="dropdownlist" width="100%" labelField="value" requireSelection="true" horizontalCenter="0">
+						<s:dataProvider>
+							<s:ArrayList>
+								<fx:Object value="unc" />
+								<fx:Object value="ftp" />								
+							</s:ArrayList>
+						</s:dataProvider>
+					</s:DropDownList>
+
+				</mx:GridItem>
+			</mx:GridRow>-->
+			
+			<mx:GridRow width="100%">
+				<mx:GridItem width="33%" verticalAlign="middle">
+					<s:Label width="100%" text="Start Time"/>
+				</mx:GridItem>
+				<mx:GridItem width="100%">
+					<s:TextInput id="mTextInputStart" width="100%" enabled="false" text="{start}"/>
+				</mx:GridItem>				
+			</mx:GridRow>
+			
+			<mx:GridRow width="100%">
+				<mx:GridItem width="33%" verticalAlign="middle">
+					<s:Label width="100%" text="End Time"/>
+				</mx:GridItem>
+				<mx:GridItem>
+					<s:TextInput id="mTextInputEnd" width="100%" enabled="false" text="{end}"/>
+				</mx:GridItem>
+			</mx:GridRow>
+		</mx:Grid>
+			
+		<s:BorderContainer width="100%" borderVisible="false">
+			<s:layout>
+				<s:HorizontalLayout horizontalAlign="center"/>
+			</s:layout>
+			<s:Button width="100%" height="30" label="Yes" click="clickHandler(event)"/>
+			<s:Button width="100%" height="30" label="No" click="closeHandler()"/>
+		</s:BorderContainer>
+	</s:BorderContainer>
+	
+</s:TitleWindow>
